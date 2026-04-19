@@ -179,7 +179,7 @@ jobs:
             cd /opt/resume-analyzer
             git pull origin main
 
-            docker compose pull
-            docker compose up -d --remove-orphans
+            docker-compose pull
+            docker-compose up -d --remove-orphans
 
             echo "Production deployment complete — SHA: ${{ github.sha }}"
