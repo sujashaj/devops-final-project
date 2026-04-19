@@ -1,10 +1,6 @@
-version: "3.9"
-
 services:
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ${ECR_REGISTRY}/${DOCKER_IMAGE_BACKEND:-resume-analyzer-backend}:${IMAGE_TAG:-latest}
     container_name: resume-backend
     ports:
       - "8000:8000"
@@ -24,9 +20,7 @@ services:
       retries: 3
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ${ECR_REGISTRY}/${DOCKER_IMAGE_FRONTEND:-resume-analyzer-frontend}:${IMAGE_TAG:-latest}
     container_name: resume-frontend
     ports:
       - "3002:80"
