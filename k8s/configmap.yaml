@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resume-analyzer-config
+  namespace: default
+  labels:
+    app: resume-analyzer
+data:
+  ENVIRONMENT: "production"
+  AWS_REGION: "us-east-1"
+  GEMINI_SECRET_NAME: "gemini-api-key"
+  USE_LOCAL_API_KEY: "false"

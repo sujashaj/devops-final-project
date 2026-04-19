@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resume-analyzer-backend
+  namespace: default
+  labels:
+    app: resume-analyzer
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: resume-analyzer
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: resume-analyzer
+        component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+        - name: backend
+          image: resume-analyzer-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: resume-analyzer-config
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: access-key-id
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: secret-access-key
+                  optional: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resume-analyzer-frontend
+  namespace: default
+  labels:
+    app: resume-analyzer
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: resume-analyzer
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: resume-analyzer
+        component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: resume-analyzer-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
