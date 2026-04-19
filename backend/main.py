@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 import boto3
 import httpx
 from google import genai
@@ -85,12 +86,18 @@ RESUME:
 
 @app.post("/analyze")
 async def analyze(
-    job_url: str = Form(...),
     resume: UploadFile = File(...),
+    job_url: str = Form(None),
+    job_text: str = Form(None),
 ):
     if not app.state.gemini_client:
         error = getattr(app.state, "startup_error", "Gemini client not initialized")
         raise HTTPException(status_code=503, detail=error)
+
+    if not job_url and not job_text:
+        raise HTTPException(status_code=422, detail="Provide either job_url or job_text.")
+    if job_url and job_text:
+        raise HTTPException(status_code=422, detail="Provide only one of job_url or job_text.")
 
     resume_bytes = await resume.read()
     try:
@@ -98,27 +105,49 @@ async def analyze(
     except UnicodeDecodeError:
         resume_text = resume_bytes.decode("latin-1")
 
-    try:
-        job_description = await scrape_job_description(job_url)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch job URL: {exc}")
+    if job_url:
+        try:
+            job_description = await scrape_job_description(job_url)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch job URL: {exc}")
+    else:
+        job_description = job_text
 
     prompt = build_prompt(job_description, resume_text)
 
-    try:
-        response = app.state.gemini_client.models.generate_content(
-            model="gemini-3.1-flash-lite-preview",
-            contents=prompt,
-        )
-        raw = response.text.strip()
-        # Strip markdown code fences if present
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        result = json.loads(raw)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Gemini error: {exc}")
+    loop = asyncio.get_running_loop()
+    last_exc = None
+    for attempt in range(4):  # 1 initial attempt + 3 retries
+        try:
+            response = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: app.state.gemini_client.models.generate_content(
+                        model="gemini-3.1-flash-lite-preview",
+                        contents=prompt,
+                    ),
+                ),
+                timeout=60.0,
+            )
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            result = json.loads(raw)
+            break
+        except Exception as exc:
+            last_exc = exc
+            retryable = isinstance(exc, asyncio.TimeoutError) or any(
+                code in str(exc) for code in ("503", "504", "UNAVAILABLE", "DEADLINE_EXCEEDED")
+            )
+            if retryable and attempt < 3:
+                await asyncio.sleep(2)
+                continue
+            if not retryable:
+                raise HTTPException(status_code=500, detail=f"Gemini error: {exc}")
+    else:
+        raise HTTPException(status_code=503, detail=f"Gemini unavailable after retries: {last_exc}")
 
     return result
 
