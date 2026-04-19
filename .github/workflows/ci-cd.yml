@@ -154,9 +154,10 @@ jobs:
             fi
             if [ ! -d /opt/resume-analyzer/.git ]; then
               sudo rm -rf /opt/resume-analyzer
+              sudo mkdir -p /opt/resume-analyzer
+              sudo chown ec2-user:ec2-user /opt/resume-analyzer
               git clone https://github.com/sujashaj/devops-final-project.git /opt/resume-analyzer
             fi
-            sudo chown -R ec2-user:ec2-user /opt/resume-analyzer
 
       - name: Deploy to production EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
